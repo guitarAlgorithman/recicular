@@ -14,7 +14,14 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Middlewares globales
-app.use(cors());
+app.set("trust proxy", 1);
+
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(morgan("dev"));
 
@@ -32,6 +39,8 @@ app.get("/", (req, res) => {
 app.use((req, res) => {
   res.status(404).json({ error: "Ruta no encontrada" });
 });
+
+app.get("/health", (req, res) => res.json({ ok: true }));
 
 // Conexión a MongoDB Atlas y arranque del servidor
 connectDB().then(() => {
