@@ -95,7 +95,7 @@ app.use((req, res) => {
 
 // Conexión a MongoDB Atlas y arranque del servidor
 connectDB().then(() => {
-  app.listen(PORT, () => {
+  app.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 Backend Recircular escuchando en puerto ${PORT}`);
   });
 });
