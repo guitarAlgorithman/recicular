@@ -1,30 +1,52 @@
-const nodemailer = require('nodemailer');
+// backend/src/utils/sendEmail.js
+const { Resend } = require("resend");
 
-const sendEmail = async ({ to, subject, html }) => {
+function getResendClient() {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) {
+    console.warn("⚠️ RESEND_API_KEY no está definida. No se enviarán correos.");
+    return null;
+  }
+  return new Resend(key);
+}
+
+const sendEmail = async ({ to, subject, html, text }) => {
   try {
-    // Transport usando variables de entorno
-    const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: Number(process.env.EMAIL_PORT) || 587,
-      secure: false, // STARTTLS
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
+    if (process.env.EMAIL_DISABLED === "true") {
+      console.log("📧 EMAIL_DISABLED=true. No se envía email.");
+      console.log("To:", to);
+      console.log("Subject:", subject);
+      console.log("HTML:\n", html);
+      return;
+    }
 
-    const info = await transporter.sendMail({
-      from: `"Recircular" <${process.env.EMAIL_USER}>`,
+    const resend = getResendClient();
+    if (!resend) {
+      console.log("📧 Email NO enviado (sin Resend).");
+      console.log("HTML:\n", html);
+      return;
+    }
+
+    const from = process.env.EMAIL_FROM || "Recircular <onboarding@resend.dev>";
+
+    const result = await resend.emails.send({
+      from,
       to,
       subject,
-      html
+      html,
+      ...(text ? { text } : {}),
     });
 
-    console.log('✉️ Email enviado:', info.messageId);
+    if (result?.error) {
+      console.error("⚠️ Resend error:", result.error);
+      console.log("📄 HTML que SE HABRÍA ENVIADO:\n", html);
+      return;
+    }
+
+    console.log("✉️ Email enviado (Resend):", result?.data?.id || result);
   } catch (error) {
-    // Si falla el correo, NO rompemos el flujo: solo logueamos
-    console.error('⚠️ Error enviando email:', error.message);
-    console.log('📄 HTML que SE HABRÍA ENVIADO:\n', html);
+    console.error("⚠️ Error enviando email (Resend):", error.message);
+    console.log("📄 HTML que SE HABRÍA ENVIADO:\n", html);
   }
 };
 
