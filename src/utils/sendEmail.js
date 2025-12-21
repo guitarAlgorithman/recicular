@@ -1,13 +1,20 @@
 // backend/src/utils/sendEmail.js
-const { Resend } = require("resend");
+const sgMail = require("@sendgrid/mail");
 
-function getResendClient() {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    console.warn("⚠️ RESEND_API_KEY no está definida. No se enviarán correos.");
-    return null;
-  }
-  return new Resend(key);
+function sanitizeFrom(raw) {
+  if (!raw) return null;
+
+  let from = String(raw).trim();
+  from = from.replace(/^"+|"+$/g, ""); // quita " al inicio/fin
+  from = from.replace(/^'+|'+$/g, ""); // quita ' al inicio/fin
+  from = from.replace(/\s+/g, " "); // colapsa espacios
+
+  // Formatos válidos: email@x.com  OR  Name <email@x.com>
+  const emailOnly = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const nameEmail = /^.+\s<[^>\s@]+@[^>\s@]+\.[^>\s@]+>$/;
+
+  if (emailOnly.test(from) || nameEmail.test(from)) return from;
+  return null;
 }
 
 const sendEmail = async ({ to, subject, html, text }) => {
@@ -20,33 +27,43 @@ const sendEmail = async ({ to, subject, html, text }) => {
       return;
     }
 
-    const resend = getResendClient();
-    if (!resend) {
-      console.log("📧 Email NO enviado (sin Resend).");
-      console.log("HTML:\n", html);
-      return;
-    }
-
-    const from = process.env.EMAIL_FROM || "Recircular <onboarding@resend.dev>";
-
-    const result = await resend.emails.send({
-      from,
-      to,
-      subject,
-      html,
-      ...(text ? { text } : {}),
-    });
-
-    if (result?.error) {
-      console.error("⚠️ Resend error:", result.error);
+    const key = process.env.SENDGRID_API_KEY;
+    if (!key) {
+      console.warn("⚠️ SENDGRID_API_KEY no está definida. No se enviarán correos.");
       console.log("📄 HTML que SE HABRÍA ENVIADO:\n", html);
       return;
     }
 
-    console.log("✉️ Email enviado (Resend):", result?.data?.id || result);
+    sgMail.setApiKey(key);
+
+    const from = sanitizeFrom(process.env.EMAIL_FROM);
+    if (!from) {
+      console.warn(
+        '⚠️ EMAIL_FROM inválido. Debe ser "email@dominio.com" o "Nombre <email@dominio.com>".'
+      );
+      console.log("EMAIL_FROM recibido:", process.env.EMAIL_FROM);
+      console.log("📄 HTML que SE HABRÍA ENVIADO:\n", html);
+      return;
+    }
+
+    // Normaliza "to" a array si viene como string
+    const msg = {
+      to,
+      from,
+      subject,
+      ...(html ? { html } : {}),
+      ...(text ? { text } : {}),
+    };
+
+    const [resp] = await sgMail.send(msg);
+
+    // SendGrid responde con statusCode y headers
+    console.log("✉️ Email enviado (SendGrid):", resp?.statusCode || "OK");
   } catch (error) {
-    console.error("⚠️ Error enviando email (Resend):", error.message);
-    console.log("📄 HTML que SE HABRÍA ENVIADO:\n", html);
+    // error.response.body suele tener el detalle más útil
+    const details = error?.response?.body || null;
+    console.error("⚠️ Error enviando email (SendGrid):", error.message);
+    if (details) console.error("📩 SendGrid details:", JSON.stringify(details, null, 2));
   }
 };
 
