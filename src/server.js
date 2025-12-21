@@ -65,12 +65,25 @@ const PORT = process.env.PORT || 4000;
 
 app.set("trust proxy", 1);
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  process.env.FRONTEND_URL, // Vercel
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: (origin, cb) => {
+      // Permite llamadas sin Origin (Postman, health checks, etc.)
+      if (!origin) return cb(null, true);
+
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+
+      return cb(new Error(`CORS blocked: ${origin}`));
+    },
     credentials: true,
   })
 );
+
 
 app.use(express.json());
 app.use(morgan("dev"));
